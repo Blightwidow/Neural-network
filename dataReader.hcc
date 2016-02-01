@@ -1,0 +1,99 @@
+#include <vector>
+#include <iostream>
+#include <fstream>
+#include <cstring>
+#include <string>
+
+#define DATA_FILE "./data/learn.dat"
+
+using namespace std;
+
+/************** Class DataReader Declaration *****************/
+class DataReader
+{
+private:
+    ifstream learnFile; //The filestream to read it
+    
+public:
+    DataReader(string &fileName);
+    bool setVals (vector<double> &inputVals, vector<double> &targetVals);
+    void closeFile (void);
+};
+
+/************** Class DataReader Functions ********************/
+
+/**
+ * Constructor of the class
+ * Take the path to the file for opening it
+ */
+DataReader::DataReader(string &fileName)
+{
+   //Open files in read mode for test purposes
+   learnFile.open(fileName);
+}
+
+/**
+ * Sets the value to the current line of the reading process
+ */
+bool DataReader::setVals(vector<double> &inputVals, vector<double> &targetVals)
+{
+    //Check that file is open
+    assert(learnFile != NULL);
+    
+    inputVals.clear();
+    targetVals.clear();
+    
+    //Declarations
+    string data;
+    char *tok;
+    char *inputs;
+    char *outputs;
+    
+    //Read file
+    learnFile >> data;
+    
+    
+    char *cstr = new char[data.length() + 1];
+    strcpy(cstr, data.c_str());
+    
+    //Extract information for string
+    inputs = strtok (cstr,"|");
+    outputs = strtok (NULL,"|");
+    if (inputs == NULL)
+    {
+        return true;
+        delete [] cstr;
+    }
+    
+    //Input values
+    tok = strtok (inputs, ";");
+    inputVals.push_back(atof(tok));
+    tok = strtok (NULL, ";");
+    while (tok != NULL)
+    {
+        inputVals.push_back(atof(tok));
+        tok = strtok (NULL, ";");
+    }
+    
+    //Output values
+    tok = strtok (outputs, ";");
+    targetVals.push_back(atof(tok));
+    tok = strtok (NULL, ";");
+    while (tok != NULL)
+    {
+        targetVals.push_back(atof(tok));
+        tok = strtok (NULL, ";");
+    }
+    
+    //Cleaning and exit
+    delete [] cstr;
+    return false;
+}
+
+/**
+ * Close the file
+ */
+void DataReader::closeFile (void)
+{
+    learnFile.close();
+}

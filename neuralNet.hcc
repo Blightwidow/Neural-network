@@ -1,0 +1,167 @@
+#include <vector>
+#include <iostream>
+#include <cassert>
+#include <cmath>
+#include <cstdlib>
+#include <ctime>
+#include "neuralNeuron.hcc"
+
+using namespace std;
+
+/**
+ * A Layer is just a vector of neurons
+ */
+typedef vector<Neuron> Layer ;
+
+
+/************** Class Net Declaration ********************/
+class Net{
+public:
+    Net(vector<unsigned> &topology);
+    void feedForward (vector<double> &inputVals);
+    void backProp (vector<double> &targetVals);
+    void getResults (vector<double> &resultVals);
+    double m_error;         //Error of the network for information
+    
+private:
+    vector<Layer> m_layers; //m_layers[layerNum][neuronNum]
+};
+
+
+/************** Class Net Functions **********************/
+
+/**
+ * Constructor of the Net class. 
+ * Require a topology argument to indicate the layer of the network
+ */
+Net::Net(vector<unsigned> &topology)
+{
+    unsigned numLayer = topology.size();
+    //Initialize random seed
+    srand (time(NULL));
+    
+    //For each Layer in the topology indluding the input layer and output layer
+    //We add a new Layer type to the m_layers container 
+    for(unsigned layerNum = 0; layerNum < numLayer; layerNum++)
+    {
+        m_layers.push_back(Layer());
+        //numOutpus = 0 for the last layer, the output layer
+        //for all other layers the numOutputs is defined by the number of node
+        //in the next layer, not including the bias
+        unsigned numOutputs = layerNum == numLayer - 1 ? 0 : topology[layerNum + 1];
+        
+        //Then for each neuron in the layer, we create a neuron in the m_layers
+        //container. Note that we add another neuron in addition to the one
+        //specified by the topology, it's the bias neuron
+        for (unsigned neuronNum = 0; neuronNum <= topology[layerNum]; neuronNum++)
+        {
+            m_layers.back().push_back(Neuron(numOutputs,neuronNum));
+            cout << "Made a new neuron !" << endl;
+        }
+    
+        //Force Bias node's output to 1.0
+        m_layers.back().back().setOutputVal(1.0);
+    }
+}
+
+/**
+ * Feed forward the network
+ * The inout latches are set and the results are propagated to the network
+ */
+void Net::feedForward (vector<double> &inputVals)
+{
+    //As it's the first function after the basic creation of the network we quickyl
+    //check that we have the required data to begin
+    //It's also important because we don't have error handling in this prototype
+    assert(inputVals.size() == m_layers[0].size() - 1);
+    
+    //Latch input value into input layer
+    for(unsigned i = 0; i < inputVals.size(); i++)
+    {
+        m_layers[0][i].setOutputVal(inputVals[i]);
+    }
+    
+    //Forward propagate in each layer
+    for (unsigned layerNum = 1; layerNum < m_layers.size();layerNum++)
+    {
+        Layer &prevLayer = m_layers[layerNum - 1];
+        
+        //We want each neuron except the bias to propagate the latch values
+        for (unsigned n = 0; n < m_layers[layerNum].size() - 1;n++)
+        {
+            m_layers[layerNum][n].feedForward(prevLayer);
+        }
+    }
+}
+
+/**
+ * Learning of the network by backward propagation
+ * Each time we want the network to learn we can feed him the expected results 
+ * he will modify the weight to adapt to the expected values
+ */
+void Net::backProp (vector<double> &targetVals)
+{
+    Layer &outputLayer = m_layers.back();
+    m_error = 0.0;
+    
+    //Overall net error
+    //Even if it's the output network, we have a bias neuron registered in it
+    //It won't have any effect because it's not connected to a next Layer
+    //but we need to remember to not include it in the error calculations
+    for (unsigned n = 0; n < outputLayer.size() - 1 ; n++)
+    {
+        double delta = targetVals[n] - outputLayer[n].getOutputVal();
+        m_error += delta * delta;
+    }
+    m_error /= outputLayer.size() - 1;
+    m_error = sqrt(m_error);
+    
+    //Output layer gradient
+    //As the previous statement, we are carefull about the bias neuron
+    for (unsigned n = 0; n < outputLayer.size() - 1 ; n++)
+    {
+        outputLayer[n].calcOutputGradients(targetVals[n]);
+    }
+    
+    //Hidden layer gradient
+    for (unsigned layerNum = outputLayer.size() - 2; layerNum > 0; layerNum--)
+    {
+        Layer &hiddenLayer = m_layers[layerNum];
+        Layer &nextLayer = m_layers[layerNum + 1];
+        
+        for (unsigned n = 0; n < hiddenLayer.size(); n++)
+        {
+            hiddenLayer[n].calcHiddenGradients(nextLayer);
+        }
+    }
+    
+    //Update weights for all layers except output layer
+    //The output weight of the output layer are useless
+    for (unsigned layerNum = m_layers.size() - 1; layerNum > 0; layerNum-- )
+    {
+        Layer &layer = m_layers[layerNum];
+        Layer &prevLayer = m_layers[layerNum - 1];
+        
+        //We update the weight by asking some node to modify the input weight of
+        //its inputs. Because a bias node doesn't have inputs, we don't include
+        //them in this loop
+        for (unsigned n = 0; n < layer.size() - 1; n++)
+        {
+            layer[n].updateInputWeights(prevLayer);
+        }
+    }
+}
+
+/**
+ * A small function to get the outputs of the network
+ */
+void Net::getResults (vector<double> &resultVals)
+{
+    resultVals.clear();
+    
+    //We push all the output values of the last layer except the bias value
+    for (unsigned n = 0; n < m_layers.back().size() - 1; n++)
+    {
+        resultVals.push_back(m_layers.back()[n].getOutputVal());
+    }
+}

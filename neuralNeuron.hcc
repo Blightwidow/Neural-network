@@ -1,0 +1,173 @@
+#include <vector>
+#include <iostream>
+#include <cstdlib>
+#include <cmath>
+
+using namespace std;
+
+/************** Structure and Typedef *******************/
+class Neuron; //Quick definition for typedef of Layer;
+
+/**
+ * A connection is just the weight of the link between neurons
+ * Because we need the deltaWeight for some backprop calculations
+ * we made a small struct to hold the weights and the deltaweights
+ */
+struct Connection
+{
+    double weight;
+    double deltaWeight;
+};
+
+/**
+ * The Layer definition is just a vector of Neurons
+ */
+typedef vector<Neuron> Layer ;
+
+/************** Class Neuron Declaration*****************/
+class Neuron
+{
+public:
+    Neuron(unsigned numOutputs, unsigned myIndex);
+    void feedForward(Layer &prevLayer);
+    void setOutputVal(double val) { m_outputVal = val; }
+    double getOutputVal(void) { return m_outputVal; }
+    void calcOutputGradients (double targetVal);
+    void calcHiddenGradients (Layer &nextLayer);
+    void updateInputWeights(Layer &prevLayer);
+    
+private:
+    static double transferFunction (double x);
+    static double transferFunctionDerivative (double x);
+    static double randomWeight (void) { return ((double) rand() / (RAND_MAX)); }
+    double sumDOW(Layer &nextLayer);    
+    double m_outputVal;                 //The output value of the neuron
+    vector<Connection> m_outputWeights; //The output weight of the neuron
+    unsigned m_myIndex;                 //The index of the neuron in the Layer
+    double m_gradient;                  //the gradient between the expected result and output
+    static double eta;                  //Learning constant
+    static double alpha;                //Learning constant
+};
+
+double Neuron::eta = 0.15;
+double Neuron::alpha = 0.6;
+
+/************** Class Neuron Functionds *****************/
+/**
+ * Constructor of the Neuron class
+ * takes the number of Outputs that the neuron is connected to initialize random weights
+ * and also the index number of the neuron in the Layer
+ */
+Neuron::Neuron(unsigned numOutputs, unsigned myIndex)
+{
+    //For each output of the neuron we add a connection to the output weights
+    //Then we initalize the weight whit a rand value between 0 and 1
+    for(unsigned c = 0; c < numOutputs; c++)
+    {
+        m_outputWeights.push_back(Connection());
+        m_outputWeights.back().weight = randomWeight();
+    }
+    
+    //We also feed the neuron with it's position number in the Layer for later purposes
+    m_myIndex = myIndex;
+}
+
+/**
+ * Propagate the neuron forward by calculating a new output from the weighted inputs
+ */
+void Neuron::feedForward(Layer &prevLayer)
+{
+    double sum = 0.0;
+    
+    //For each neuron of the previous layer (with the bias) we sum the weighted output
+    for (unsigned n = 0; n < prevLayer.size(); n++)
+    {
+        sum += prevLayer[n].getOutputVal() * prevLayer[n].m_outputWeights[m_myIndex].weight;
+    }
+    
+    //Then update the output_value of neuron
+    m_outputVal = Neuron::transferFunction(sum);
+}
+
+/**
+ * Calculate the gradient of the output layer
+ * To do so, we need the target value to compare it to the output of the layer
+ */
+void Neuron::calcOutputGradients (double targetVal)
+{
+    //Update gradients by comparing to the target value
+    double delta = targetVal - m_outputVal;
+    m_gradient = delta * Neuron::transferFunctionDerivative(m_outputVal);
+}
+
+/**
+ * Calculate the gradient of the hidden layer
+ * To do so, we need the next layer values to feed the sumDOW function
+ */
+void Neuron::calcHiddenGradients (Layer &nextLayer)
+{
+    //Instead of target value we use the sum of Derivative of weight of next layer
+    double dow = sumDOW(nextLayer);
+    m_gradient = dow * Neuron::transferFunctionDerivative(m_outputVal);
+}
+
+/**
+ * Update the input weights of a Layer
+ * To do so, the neuron has to access the weights of the neurons in the previous Layer
+ * This function allow the neuron to learn
+ */
+void Neuron::updateInputWeights(Layer &prevLayer)
+{
+    //For each neuron of the previous Layer, including bias, we update the
+    //output weights of the neurons by back propagation calculations
+    for (unsigned n = 0; n < prevLayer.size(); n++)
+    {
+        Neuron &neuron = prevLayer[n];
+        double oldDeltaWeight = neuron.m_outputWeights[m_myIndex].deltaWeight;
+        
+        double newDeltaWeight =
+            eta
+            * neuron.getOutputVal()
+            * m_gradient
+            + alpha
+            * oldDeltaWeight;
+            
+        neuron.m_outputWeights[m_myIndex].deltaWeight = newDeltaWeight;
+        neuron.m_outputWeights[m_myIndex].weight += newDeltaWeight;
+    }
+}
+
+/*
+ * The transfer function of the neuron
+ * For now it's a basic hyperbolic tangeant
+ */
+double Neuron::transferFunction (double x)
+{
+    return tanh(x);
+}
+
+/**
+ * The derivative of the transfer function of the neuron
+ * We can approximate quickly the derivative by 1-x²
+ */
+double Neuron::transferFunctionDerivative (double x)
+{
+    return 1.0 - x * x;
+    
+}
+
+/**
+ * This function return the sum of the deltaweights in the m_outputWeights vector
+ */
+double Neuron::sumDOW(Layer &nextLayer)
+{
+    double sum = 0.0;
+    
+    //For each neuron expect bias, we sum the contributions to error of the next layer
+    for(unsigned n = 0; n < nextLayer.size() - 1; n++)
+    {
+        sum += m_outputWeights[n].weight * nextLayer[n].m_gradient;
+    }
+    
+    return sum;
+}
